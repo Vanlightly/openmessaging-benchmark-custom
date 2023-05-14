@@ -1,0 +1,31 @@
+# Eclipse
+.classpath
+.project
+.settings/
+
+# Intellij
+.idea/
+*.iml
+*.iws
+
+.factorypath
+
+# Mac
+.DS_Store
+
+# Maven
+log/
+target/
+
+# Terraform
+**/.terraform/*
+.terraform.*
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# OMB specific
+hosts.ini
+charts/output
+charts/results
+**/deploy/results

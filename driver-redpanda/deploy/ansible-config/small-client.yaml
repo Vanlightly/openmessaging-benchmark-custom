@@ -1,0 +1,3 @@
+clientMinJvmHeap: 2g
+clientMaxJvmHeap: 2g
+partition_percent: 100

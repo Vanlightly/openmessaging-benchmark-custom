@@ -1,0 +1,178 @@
+<!--
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+  http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+  -->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<groupId>io.openmessaging.benchmark</groupId>
+	<artifactId>messaging-benchmark</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>Messaging Benchmark</name>
+	<packaging>pom</packaging>
+
+	<modules>
+		<module>benchmark-framework</module>
+		<module>driver-api</module>
+		<module>driver-pulsar</module>
+		<module>driver-kafka</module>
+		<module>driver-redpanda</module>
+		<module>driver-bookkeeper</module>
+		<module>package</module>
+		<module>docker</module>
+	</modules>
+
+
+	<licenses>
+		<license>
+			<name>Apache License, Version 2.0</name>
+			<url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+			<distribution>repo</distribution>
+		</license>
+	</licenses>
+
+	<properties>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+		<project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+		<bookkeeper.version>4.14.0</bookkeeper.version>
+		<jackson.version>2.13.2</jackson.version>
+	</properties>
+
+	<build>
+		<plugins>
+			<plugin>
+				<groupId>com.mycila</groupId>
+				<artifactId>license-maven-plugin</artifactId>
+				<version>3.0</version>
+				<configuration>
+					<header>dev/license-header.txt</header>
+
+					<excludes>
+						<exclude>LICENSE</exclude>
+						<exclude>NOTICE</exclude>
+						<exclude>payload/**</exclude>
+						<exclude>**/*.pyc</exclude>
+						<exclude>**/.pydevproject</exclude>
+						<exclude>**/*.yml</exclude>
+						<exclude>**/*.j2</exclude>
+						<exclude>.github/**</exclude>
+					</excludes>
+					<mapping>
+						<benchmark>SCRIPT_STYLE</benchmark>
+						<j2>SCRIPT_STYLE</j2>
+						<conf>SCRIPT_STYLE</conf>
+						<yaml>SCRIPT_STYLE</yaml>
+						<md>XML_STYLE</md>
+					</mapping>
+				</configuration>
+				<executions>
+					<execution>
+						<goals>
+							<goal>check</goal>
+						</goals>
+					</execution>
+				</executions>
+			</plugin>
+		</plugins>
+	</build>
+
+	<dependencies>
+		<dependency>
+			<groupId>org.slf4j</groupId>
+			<artifactId>slf4j-api</artifactId>
+			<version>1.7.25</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>${jackson.version}</version>
+		</dependency>
+
+		<dependency>
+			<groupId>com.fasterxml.jackson.dataformat</groupId>
+			<artifactId>jackson-dataformat-yaml</artifactId>
+			<version>${jackson.version}</version>
+		</dependency>
+		<dependency>
+		  <groupId>io.netty</groupId>
+		  <artifactId>netty-all</artifactId>
+		  <version>4.1.48.Final</version>
+		</dependency> 
+
+	</dependencies>
+	
+	<dependencyManagement>
+		<dependencies>
+		  <dependency>
+			<groupId>com.google.guava</groupId>
+			<artifactId>guava</artifactId>
+			<version>29.0-jre</version>
+		  </dependency>
+		</dependencies>
+	</dependencyManagement>
+
+	<profiles>
+		<profile>
+			<id>modern-java-compile</id>
+			<activation>
+				<jdk>[9,)</jdk>
+			</activation>
+			<build>
+				<pluginManagement>
+					<plugins>
+						<plugin>
+							<groupId>org.apache.maven.plugins</groupId>
+							<artifactId>maven-compiler-plugin</artifactId>
+							<version>3.8.1</version>
+							<configuration>
+								<source>8</source>
+								<target>8</target>
+								<release>8</release>
+								<encoding>UTF-8</encoding>
+								<showDeprecation>true</showDeprecation>
+								<showWarnings>true</showWarnings>
+								<optimize>true</optimize>
+							</configuration>
+						</plugin>
+					</plugins>
+				</pluginManagement>
+			</build>
+		</profile>
+		<profile>
+			<id>jdk-8-compile</id>
+			<activation>
+				<jdk>[,8]</jdk>
+			</activation>
+			<build>
+				<pluginManagement>
+					<plugins>
+						<plugin>
+							<groupId>org.apache.maven.plugins</groupId>
+							<artifactId>maven-compiler-plugin</artifactId>
+							<version>3.8.1</version>
+							<configuration>
+								<source>8</source>
+								<target>8</target>
+								<encoding>UTF-8</encoding>
+								<showDeprecation>true</showDeprecation>
+								<showWarnings>true</showWarnings>
+								<optimize>true</optimize>
+							</configuration>
+						</plugin>
+					</plugins>
+				</pluginManagement>
+			</build>
+		</profile>
+	</profiles>
+</project>
