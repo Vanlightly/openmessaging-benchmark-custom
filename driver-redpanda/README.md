@@ -3,8 +3,8 @@
 This README provides you with step-by-step instructions for running three main Redpanda examples, on different hardware configurations.
 Each of these options has their own similar-yet-different setup steps, as the ansible and terraform configurations need to match.
 - Example deployment with i3en.6xlarge instances (which is for storage optimized instances such as the i3 class)
-- Example deployment with m6in.8xlarge instances with io1 EBS drives (which provisions Redpanda instances with gp3 volumes)
-- Example deployment with m6in.8xlarge instances with gp3 EBS drives (which provisions Redpanda instances with io1 or io2 volumes)
+- Example deployment with m6in.8xlarge instances with io1 EBS drives (which provisions Redpanda instances with io1 or io2 volumes)
+- Example deployment with m6in.8xlarge instances with gp3 EBS drives (which provisions Redpanda instances with gp3 volumes)
 
 Running the workloads, observing progress, and collecting results all share a common workflow.
 
