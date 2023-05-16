@@ -218,6 +218,7 @@ Example with TLS and SASL.
 ```bash
 cd ..
 cat > ansible-config/my-tls-config.yaml << EOF
+redpanda_package: redpanda=23.1.7-1
 clientMinJvmHeap: 16g
 clientMaxJvmHeap: 40g
 partition_percent: 100
@@ -231,6 +232,7 @@ Example without TLS and SASL.
 ```bash
 cd ..
 cat > ansible-config/my-non-tls-config.yaml << EOF
+redpanda_package: redpanda=23.1.7-1
 clientMinJvmHeap: 16g
 clientMaxJvmHeap: 40g
 partition_percent: 100

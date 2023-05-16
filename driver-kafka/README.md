@@ -76,6 +76,7 @@ cp hosts.ini ../.
 ```bash
 cd ..
 cat > ansible-config/my-config.yaml << EOF
+kafkaServerVersion: 3.4.0
 kafkaServerLogDirs: /mnt/data-1,/mnt/data-2
 kafkaServerNumReplicaFetchers: 8
 kafkaServerNumNetworkThreads: 8
@@ -154,6 +155,7 @@ cp hosts.ini ../.
 ```bash
 cd ..
 cat > ansible-config/my-config.yaml << EOF
+kafkaServerVersion: 3.4.0
 kafkaServerLogDirs: /mnt/data-1
 kafkaServerNumReplicaFetchers: 2
 kafkaServerNumNetworkThreads: 2
@@ -229,6 +231,7 @@ cp hosts.ini ../.
 ```bash
 cd ..
 cat > ansible-config/my-config.yaml << EOF
+kafkaServerVersion: 3.4.0
 kafkaServerLogDirs: /mnt/data-1,/mnt/data-2
 kafkaServerNumReplicaFetchers: 8
 kafkaServerNumNetworkThreads: 8
