@@ -28,4 +28,6 @@ target/
 hosts.ini
 charts/output
 charts/results
+charts/other_results
 **/deploy/results
+index.html

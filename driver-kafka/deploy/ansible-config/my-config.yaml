@@ -1,0 +1,9 @@
+kafkaServerVersion: 3.5.0
+kafkaServerLogDirs: /mnt/data-1,/mnt/data-2
+kafkaServerNumReplicaFetchers: 8
+kafkaServerNumNetworkThreads: 8
+kafkaServerMinJvmHeap: 6G
+kafkaServerMaxJvmHeap: 6G
+clientMinJvmHeap: 16G
+clientMaxJvmHeap: 40G
+kafkaClusterID: 1RmvK1_DSN6altnH1CWC4Q

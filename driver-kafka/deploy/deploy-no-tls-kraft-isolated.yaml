@@ -137,11 +137,11 @@
   connection: ssh
   tasks:
     - set_fact:
-        zookeeperServers: "{{ groups['zookeeper'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:2181') | join(',') }}"
+        controllerServers: "{{ groups['controller'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:9093') | join(',') }}"
         bootstrapServers: "{{ groups['kafka'] | map('extract', hostvars, ['private_ip']) | map('regex_replace', '^(.*)$', '\\1:9092') | join(',') }}"
 
 - name: Kafka installation
-  hosts: kafka, zookeeper
+  hosts: kafka, controller
   tags: kafka
   connection: ssh
   become: true
@@ -149,11 +149,11 @@
     - file: path=/opt/kafka state=absent
     - file: path=/opt/kafka state=directory
     - set_fact:
-        zookeeperServers: "{{ groups['zookeeper'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:2181') | join(',') }}"
+        controllerServers: "{{ groups['controller'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:9093') | join(',') }}"
         bootstrapServers: "{{ groups['kafka'] | map('extract', hostvars, ['private_ip']) | map('regex_replace', '^(.*)$', '\\1:9092') | join(',') }}"
         kafkaVersion: "{{ kafkaServerVersion }}"
     - debug:
-        msg: "zookeeper servers: {{ zookeeperServers }}\nbootstrap servers: {{ bootstrapServers }}"
+        msg: "controller servers: {{ controllerServers }}\nbootstrap servers: {{ bootstrapServers }}"
 
     #################### Release ####################
     - name: Download Kafka package
@@ -177,35 +177,67 @@
       template:
         src: "monitoring/jmx_exporter/metrics.yml"
         dest: "/opt/kafka/metrics.yml"
-    - name: Configure JMX for Prometheus (Zookeeper)
+    - name: Configure JMX for Prometheus (Controller)
       template:
         src: "monitoring/jmx_exporter/zookeeper.yml"
         dest: "/opt/kafka/zookeeper.yml"
 
-- name: Setup ZooKeeper
-  hosts: zookeeper
-  tags: kafka
+# - name: Setup ZooKeeper
+#   hosts: zookeeper
+#   tags: kafka
+#   connection: ssh
+#   become: true
+#   tasks:
+#     - set_fact:
+#         zid: "{{ groups['zookeeper'].index(inventory_hostname) }}"
+#     - file:
+#         path: "/opt/kafka/data/zookeeper"
+#         state: directory
+#     - template:
+#         src: "templates/zookeeper.properties"
+#         dest: "/opt/kafka/config/zookeeper.properties"
+#     - template:
+#         src: templates/myid
+#         dest: "/opt/kafka/data/zookeeper/myid"
+#     - template:
+#         src: "templates/zookeeper.service"
+#         dest: "/etc/systemd/system/zookeeper.service"
+#     - systemd:
+#         state: restarted
+#         daemon_reload: yes
+#         name: "zookeeper"
+
+- name: Setup Controller
+  hosts: controller
+  tags: controller
   connection: ssh
   become: true
   tasks:
     - set_fact:
-        zid: "{{ groups['zookeeper'].index(inventory_hostname) }}"
-    - file:
-        path: "/opt/kafka/data/zookeeper"
-        state: directory
+        brokerId: "{{ groups['controller'].index(inventory_hostname) }}"
+        privateIp: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+    # - shell:
+    #     cmd: "/opt/kafka/bin/kafka-storage.sh random-uuid"
+    #   run_once: true
+    #   register: storage_id
+    - name: Set up Controller
+      template:
+        src: "templates/controller.properties"
+        dest: "/opt/kafka/config/controller.properties"
     - template:
-        src: "templates/zookeeper.properties"
-        dest: "/opt/kafka/config/zookeeper.properties"
-    - template:
-        src: templates/myid
-        dest: "/opt/kafka/data/zookeeper/myid"
-    - template:
-        src: "templates/zookeeper.service"
-        dest: "/etc/systemd/system/zookeeper.service"
+        src: "templates/controller.service"
+        dest: "/etc/systemd/system/controller.service"
+    - name: Initialise Storage
+      shell:
+        cmd: "/opt/kafka/bin/kafka-storage.sh format -t {{ kafkaClusterID }} -c /opt/kafka/config/controller.properties"
+      register: result
+      failed_when:
+        - result.rc != 0
+        - '"is already formatted" not in result.stderr'
     - systemd:
         state: restarted
         daemon_reload: yes
-        name: "zookeeper"
+        name: "controller"
 
 - name: Setup Kafka
   hosts: kafka
@@ -214,16 +246,23 @@
   become: true
   tasks:
     - set_fact:
-        brokerId: "{{ groups['kafka'].index(inventory_hostname) }}"
+        brokerId: "{{ groups['kafka'].index(inventory_hostname)+3}}"
         privateIp: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
-        zookeeperServers: "{{ groups['zookeeper'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:2181') | join(',') }}"
+        controllerServers: "{{ groups['controller'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:9093') | join(',') }}"
     - name: Set up broker
       template:
-        src: "templates/server-no-tls.properties"
-        dest: "/opt/kafka/config/server.properties"
+        src: "templates/broker.properties"
+        dest: "/opt/kafka/config/broker.properties"
     - template:
         src: "templates/kafka.service"
         dest: "/etc/systemd/system/kafka.service"
+    - name: Initialise Storage
+      shell:
+        cmd: "/opt/kafka/bin/kafka-storage.sh format -t {{ kafkaClusterID }} -c /opt/kafka/config/broker.properties"
+      register: result
+      failed_when:
+        - result.rc != 0
+        - '"is already formatted" not in result.stderr'
     - systemd:
         state: restarted
         daemon_reload: yes
@@ -309,8 +348,8 @@
   become: false
   tasks:
     - debug:
-        msg: "Zookeeper servers {{ item }}"
-      with_items: "{{ groups['zookeeper'] }}"
+        msg: "Controller servers {{ item }}"
+      with_items: "{{ groups['controller'] }}"
     - debug:
         msg: "Kafka brokers {{ item }}"
       with_items: "{{ groups['kafka'] }}"

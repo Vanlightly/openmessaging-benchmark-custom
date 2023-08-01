@@ -3,6 +3,11 @@
 ${ ip } ansible_user=${ ssh_user } ansible_become=True private_ip=${kafka_private_ips[i]} id=${i}
 %{ endfor ~}
 
+[zookeeper]
+%{ for i, ip in zookeeper_public_ips ~}
+${ ip } ansible_user=${ ssh_user } ansible_become=True private_ip=${zookeeper_private_ips[i]} id=${i}
+%{ endfor ~}
+
 [client]
 %{ for i, ip in clients_public_ips ~}
 ${ ip } ansible_user=${ ssh_user } ansible_become=True private_ip=${clients_private_ips[i]} id=${i}

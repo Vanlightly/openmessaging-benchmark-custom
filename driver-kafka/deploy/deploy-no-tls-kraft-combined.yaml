@@ -137,11 +137,10 @@
   connection: ssh
   tasks:
     - set_fact:
-        zookeeperServers: "{{ groups['zookeeper'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:2181') | join(',') }}"
         bootstrapServers: "{{ groups['kafka'] | map('extract', hostvars, ['private_ip']) | map('regex_replace', '^(.*)$', '\\1:9092') | join(',') }}"
 
 - name: Kafka installation
-  hosts: kafka, zookeeper
+  hosts: kafka
   tags: kafka
   connection: ssh
   become: true
@@ -149,11 +148,10 @@
     - file: path=/opt/kafka state=absent
     - file: path=/opt/kafka state=directory
     - set_fact:
-        zookeeperServers: "{{ groups['zookeeper'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:2181') | join(',') }}"
         bootstrapServers: "{{ groups['kafka'] | map('extract', hostvars, ['private_ip']) | map('regex_replace', '^(.*)$', '\\1:9092') | join(',') }}"
         kafkaVersion: "{{ kafkaServerVersion }}"
     - debug:
-        msg: "zookeeper servers: {{ zookeeperServers }}\nbootstrap servers: {{ bootstrapServers }}"
+        msg: "bootstrap servers: {{ bootstrapServers }}"
 
     #################### Release ####################
     - name: Download Kafka package
@@ -177,57 +175,66 @@
       template:
         src: "monitoring/jmx_exporter/metrics.yml"
         dest: "/opt/kafka/metrics.yml"
-    - name: Configure JMX for Prometheus (Zookeeper)
-      template:
-        src: "monitoring/jmx_exporter/zookeeper.yml"
-        dest: "/opt/kafka/zookeeper.yml"
 
-- name: Setup ZooKeeper
-  hosts: zookeeper
-  tags: kafka
-  connection: ssh
-  become: true
-  tasks:
-    - set_fact:
-        zid: "{{ groups['zookeeper'].index(inventory_hostname) }}"
-    - file:
-        path: "/opt/kafka/data/zookeeper"
-        state: directory
-    - template:
-        src: "templates/zookeeper.properties"
-        dest: "/opt/kafka/config/zookeeper.properties"
-    - template:
-        src: templates/myid
-        dest: "/opt/kafka/data/zookeeper/myid"
-    - template:
-        src: "templates/zookeeper.service"
-        dest: "/etc/systemd/system/zookeeper.service"
-    - systemd:
-        state: restarted
-        daemon_reload: yes
-        name: "zookeeper"
+# - name: Setup Controller
+#   hosts: controller
+#   tags: controller
+#   connection: ssh
+#   become: true
+#   tasks:
+#     - set_fact:
+#         brokerId: "{{ groups['controller'].index(inventory_hostname) }}"
+#         privateIp: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+#     # - shell:
+#     #     cmd: "/opt/kafka/bin/kafka-storage.sh random-uuid"
+#     #   run_once: true
+#     #   register: storage_id
+#     - name: Set up Controller
+#       template:
+#         src: "templates/controller.properties"
+#         dest: "/opt/kafka/config/controller.properties"
+#     - template:
+#         src: "templates/controller.service"
+#         dest: "/etc/systemd/system/controller.service"
+#     - name: Initialise Storage
+#       shell:
+#         cmd: "/opt/kafka/bin/kafka-storage.sh format -t {{ kafkaClusterID }} -c /opt/kafka/config/controller.properties"
+#       register: result
+#       failed_when:
+#         - result.rc != 0
+#         - '"is already formatted" not in result.stderr'
+#     - systemd:
+#         state: restarted
+#         daemon_reload: yes
+#         name: "controller"
 
 - name: Setup Kafka
   hosts: kafka
-  tags: kafka
+  tags: setup
   connection: ssh
   become: true
   tasks:
     - set_fact:
-        brokerId: "{{ groups['kafka'].index(inventory_hostname) }}"
+        brokerId: "{{ groups['kafka'].index(inventory_hostname)}}"
         privateIp: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
-        zookeeperServers: "{{ groups['zookeeper'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:2181') | join(',') }}"
     - name: Set up broker
       template:
-        src: "templates/server-no-tls.properties"
-        dest: "/opt/kafka/config/server.properties"
+        src: "templates/combined.properties"
+        dest: "/opt/kafka/config/combined.properties"
     - template:
-        src: "templates/kafka.service"
-        dest: "/etc/systemd/system/kafka.service"
+        src: "templates/combined.service"
+        dest: "/etc/systemd/system/combined.service"
+    - name: Initialise Storage
+      shell:
+        cmd: "/opt/kafka/bin/kafka-storage.sh format -t {{ kafkaClusterID }} -c /opt/kafka/config/combined.properties"
+      register: result
+      failed_when:
+        - result.rc != 0
+        - '"is already formatted" not in result.stderr'
     - systemd:
         state: restarted
         daemon_reload: yes
-        name: "kafka"
+        name: "combined"
 
 - name: Chrony setup
   hosts: client
@@ -308,9 +315,6 @@
   hosts: localhost
   become: false
   tasks:
-    - debug:
-        msg: "Zookeeper servers {{ item }}"
-      with_items: "{{ groups['zookeeper'] }}"
     - debug:
         msg: "Kafka brokers {{ item }}"
       with_items: "{{ groups['kafka'] }}"
