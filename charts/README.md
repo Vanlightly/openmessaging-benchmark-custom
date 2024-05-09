@@ -7,7 +7,7 @@ You can create HTML files with individual charts for each json file, or you can 
 Install the necessary Python packages.
 
 ```bash
-python3 -m pip -r install requirements.txt
+python3 -m pip install -r requirements.txt
 ```
 
 ## Basic coalesce charts

@@ -26,6 +26,8 @@ target/
 
 # OMB specific
 hosts.ini
+charts/venv
 charts/output
 charts/results
 **/deploy/results
+charts/**/*.json
