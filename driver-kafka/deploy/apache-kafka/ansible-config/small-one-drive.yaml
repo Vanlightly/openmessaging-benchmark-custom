@@ -1,4 +1,4 @@
-kafkaServerVersion: 3.4.0
+kafkaServerVersion: 3.7.0
 kafkaServerLogDirs: /mnt/data-1
 kafkaServerNumReplicaFetchers: 2
 kafkaServerNumNetworkThreads: 2
