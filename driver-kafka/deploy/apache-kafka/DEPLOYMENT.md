@@ -1,7 +1,5 @@
 # How to deploy
 
-This automation only deploy the clients and assumes you will create a Kafka cluster yourself.
-
 Due to the age of this automation, some is no longer supported, and some parts do not work on Aple Silicon. The deployment is split up into:
 1. Terraform, to provision all the servers, including a server for running Ansible.
 2. Running Ansible from an Ubuntu 20.04 instance inside the VPC.
@@ -26,7 +24,11 @@ ssh-keygen -f ~/.ssh/omb
 
 ### 1) Deploy servers (Terraform)
 
-Configure the `terraform.tfvars` according to your needs. You will need to ensure there is enough hardware for the clients to match the desired load.
+There are a number of deployments in the `deploy/terraform` directory:
+- `ebs-gp3-drive`
+- `local-nvme-drive`
+
+Choose which type of drive you want. Configure the `terraform.tfvars` according to your needs. There is an example tfvars file in each of the above directories.
 
 Example `terraform.tfvars`:
 
@@ -34,20 +36,29 @@ Example `terraform.tfvars`:
 public_key_path = "~/.ssh/omb.pub"
 region          = "us-west-2"
 az		        = "us-west-2b"
-runner_ami      = "ami-0d31d7c9fc9503726" # Ubuntu 20.04, AMD64
+deploy_ami      = "ami-0d31d7c9fc9503726" # Ubuntu 20.04, AMD64
 ami             = "ami-09c3a3c2cf6003f6c" # Ubuntu 22.04, AMD64
 
 instance_types = {
   "deploy"     = "t3.small"
-  "client"     = "c5n.9xlarge"
+  "kafka"      = "m6in.4xlarge"
+  "zookeeper"  = "t2.medium"
+  "client"     = "c5n.4xlarge"
   "prometheus" = "i3en.xlarge"
 }
 
 num_instances = {
   "deploy"     = 1
   "client"     = 2
+  "kafka"      = 3
+  "zookeeper"  = 3
   "prometheus" = 1
 }
+
+gp3_size_gb       = 3000
+gp3_iops          = 6000
+gp3_throughput_mb = 500
+gp3_count         = 1
 ```
 
 Set `deploy = 0` if you want to run Ansible locally. This will only work on older MacOS versions, and on Intel architectures. When `deploy = 1`, an Ubuntu 20.04 instance is deployed which you will use to run Ansible.
@@ -121,7 +132,7 @@ mvn clean install -Dlicense.skip=true
 Next install the Ansible Galaxy roles.
 
 ```
-cd driver-kafka/deploy/clients-only/ansible
+cd driver-kafka/deploy/apache-kafka/ansible
 ansible-galaxy install -r requirements.yaml
 ```
 
@@ -134,32 +145,59 @@ Check which yaml file you want to use in the `ansible-config` directory.
 For example, `my-config.yaml`:
 
 ```
-clientMinJvmHeap: 4g
-clientMaxJvmHeap: 16g
+kafkaServerVersion: 3.7.0
+kafkaServerLogDirs: /mnt/data-1
+kafkaServerNumReplicaFetchers: 2
+kafkaServerNumNetworkThreads: 2
+kafkaServerMinJvmHeap: 2g
+kafkaServerMaxJvmHeap: 2g
+clientMinJvmHeap: 8g
+clientMaxJvmHeap: 8g
+
 ```
 
 If you are running Ansible from your local machine, or any server outside the VPC, then change the `inventory` config in `ansible.cfg`. See the inline comments.
 
-Run Ansible. This automation assumes TLS is used, and the SASL username and password are passed as the variables `api_key` and `api_secret`.
+Now run Ansible. You can deploy with or without TLS.
 
+
+
+Without TLS
+```bash
+ansible-playbook deploy-no-tls.yaml --extra-vars "@ansible-config/my-config.yaml"
 ```
-ansible-playbook deploy.yaml \
---extra-vars "@ansible-config/small-client-mem.yaml" \
---extra-vars "api_key=my_kafka_api_key" \
---extra-vars "api_secret=my_kafka_api_secret" \
---extra-vars "bootstrapServers=my_bootstrap_servers"
+
+With TLS. (Note: If you run this from your local machine, it will prompt you for your password as it needs sudo locally for the TLS cert work, so add `--ask-become-pass`)
+
+```bash
+ansible-playbook deploy-tls.yaml --extra-vars "@ansible-config/my-config.yaml"
 ```
+
+You will need to make sure that things like heap sizes and drive counts adequately match the hardware you have chosen.
 
 ### Handling Ansible failures
 
 If Ansible fails, just run it again. The usual culprit is a Cloud Alchemy role so can just rerun the job with the additional argument `--tags "monitori
-ng"`.
+ng,profiling"` plus `tls` is you are configuring that.
 
 > Ansible can take a while to complete (15-20 min) depending on your deployment.
 
 Once Ansible has finished, you can choose and deploy a workload.
 
-## 4) Tear down your environments!
+### 4) OPTIONAL: Configure Kafka in some way
+
+If you run long-running tests you'll need to set a retention limit. You can find the IP of one of the Kafka instances in the `hosts.ini`. Then ssh onto the machine and run `kafka-admin.sh` commands.
+
+Example of setting segment file size and retention limits on broker 0:
+
+```bash
+ssh -i ~/.ssh/omb ubuntu@<kafka-ip-address>
+sudo -i
+cd /opt/kafka/bin
+./kafka-configs.sh --bootstrap-server localhost:9092 --alter --entity-type brokers --entity-name 0 --add-config segment.bytes=134217728,log.segment.bytes=134217728,log.retention.ms=1200000,log.retention.bytes=40000000000,retention.ms=1200000,retention.bytes=40000000000
+```
+
+## 5) Tear down your environments!
 If you use temporary credentials, remember you may need to refresh them first.
 
 From the same Terraform directory that you ran the `apply` command, run: `terraform destroy --auto-approve` and use the same owner tag value when prompted.

@@ -116,17 +116,17 @@ resource "aws_key_pair" "auth" {
   public_key = "${file(var.public_key_path)}"
 }
 
-resource "aws_instance" "runner" {
+resource "aws_instance" "deploy" {
   ami                    = "${var.runner_ami}"
-  instance_type          = "${var.instance_types["runner"]}"
+  instance_type          = "${var.instance_types["deploy"]}"
   key_name               = "${aws_key_pair.auth.id}"
   subnet_id              = "${aws_subnet.benchmark_subnet.id}"
   vpc_security_group_ids = ["${aws_security_group.benchmark_security_group.id}"]
-  count                  = "${var.num_instances["runner"]}"
+  count                  = "${var.num_instances["deploy"]}"
   monitoring             = true
 
   tags = {
-    Name = "benchmark-runner-${count.index}"
+    Name = "benchmark-deploy-${count.index}"
     owner = "${var.owner}"
   }
 }
@@ -149,8 +149,8 @@ resource "aws_instance" "client" {
 resource "local_file" "hosts_ini" {
   content = templatefile("${path.module}/hosts_ini.tpl",
     {
-      runner_public_ips   = aws_instance.runner.*.public_ip
-      runner_private_ips  = aws_instance.runner.*.private_ip
+      runner_public_ips   = aws_instance.deploy.*.public_ip
+      runner_private_ips  = aws_instance.deploy.*.private_ip
       clients_public_ips   = aws_instance.client.*.public_ip
       clients_private_ips  = aws_instance.client.*.private_ip
       ssh_user              = "ubuntu"
@@ -162,8 +162,8 @@ resource "local_file" "hosts_ini" {
 resource "local_file" "hosts_private_ini" {
   content = templatefile("${path.module}/hosts_private_ini.tpl",
     {
-      runner_public_ips   = aws_instance.runner.*.public_ip
-      runner_private_ips  = aws_instance.runner.*.private_ip
+      runner_public_ips   = aws_instance.deploy.*.public_ip
+      runner_private_ips  = aws_instance.deploy.*.private_ip
       clients_public_ips   = aws_instance.client.*.public_ip
       clients_private_ips  = aws_instance.client.*.private_ip
       ssh_user              = "ubuntu"
@@ -181,7 +181,7 @@ output "clients" {
 
 output "runner_host" {
   value = {
-    for instance in aws_instance.runner :
+    for instance in aws_instance.deploy :
     instance.public_ip => instance.private_ip
   }
 }

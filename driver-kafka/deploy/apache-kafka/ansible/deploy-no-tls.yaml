@@ -15,9 +15,9 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-
+#
 - name: Set server settings
-  hosts: all
+  hosts: kafka, clients
   tags: server
   tasks:
     - name: set SystemMaxUse
@@ -95,22 +95,6 @@
           - openjdk-17-jdk
         state: present
 
-- name: Create CA
-  ansible.builtin.import_playbook: tls/create-ca.yml
-  tags: tls
-
-- name: Generate CSRs
-  ansible.builtin.import_playbook: tls/generate-csrs.yml
-  tags: tls
-
-- name: Generate CSRs
-  ansible.builtin.import_playbook: tls/issue-certs.yml
-  tags: tls
-
-- name: Install certs
-  ansible.builtin.import_playbook: tls/install-certs.yml
-  tags: tls
-
 - name: Format and mount disks for Kafka hosts
   hosts: kafka
   tags: server
@@ -133,6 +117,7 @@
       loop: '{{ nvme_device_ids }}'
       loop_control:
         extended: true
+      when: device_info[item]["partitions"] | length == 0
     - name: Format disks
       filesystem:
         fstype: xfs
@@ -222,19 +207,6 @@
         daemon_reload: yes
         name: "zookeeper"
 
-- name: Setup SASL Users
-  hosts: kafka
-  tags: kafka
-  tasks:
-    - name: Create superuser
-      command:
-        cmd: "/opt/kafka/bin/kafka-configs.sh --zookeeper {{ zookeeperServers }} -alter --add-config 'SCRAM-SHA-256=[iterations=8192,password=admin-secret],SCRAM-SHA-512=[password=admin-secret]' --entity-type users --entity-name admin"
-      run_once: true
-    - name: Create workload user
-      command:
-        cmd: "/opt/kafka/bin/kafka-configs.sh --zookeeper {{ zookeeperServers }} -alter --add-config 'SCRAM-SHA-256=[iterations=8192,password=admin-secret],SCRAM-SHA-512=[password=admin-secret]' --entity-type users --entity-name sa_test"
-      run_once: true
-
 - name: Setup Kafka
   hosts: kafka
   tags: kafka
@@ -247,7 +219,7 @@
         zookeeperServers: "{{ groups['zookeeper'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:2181') | join(',') }}"
     - name: Set up broker
       template:
-        src: "templates/server-tls.properties"
+        src: "templates/server-no-tls.properties"
         dest: "/opt/kafka/config/server.properties"
     - template:
         src: "templates/kafka.service"
@@ -256,32 +228,6 @@
         state: restarted
         daemon_reload: yes
         name: "kafka"
-
-- name: Setup ACLs
-  hosts: kafka
-  tags: kafka
-  tasks:
-    - set_fact:
-          bootstrapServers: "{{ groups['kafka'] | map('extract', hostvars, ['private_ip']) | map('regex_replace', '^(.*)$', '\\1:9092') | join(',') }}"
-    - name: Create client config file
-      ansible.builtin.tempfile:
-        state: file
-        suffix: temp
-      register: tempfile_1
-
-    - name: Populate client config file
-      template:
-        src: "templates/client-tls.properties"
-        dest: "{{ tempfile_1.path }}"
-
-    - name: Create ACLs
-      command:
-        cmd: "/opt/kafka/bin/kafka-acls.sh --bootstrap-server {{ bootstrapServers }} --command-config {{ tempfile_1.path }} {{ item }}"
-      loop:
-        - "--add --allow-principal User:sa_test --operation create  --cluster"
-        - "--add --allow-principal User:sa_test --operation read --operation write --operation create  --operation delete --operation describe --topic '*'"
-        - "--add --allow-principal User:sa_test  --operation read --group '*'"
-      run_once: true
 
 - name: Chrony setup
   hosts: client
@@ -309,7 +255,7 @@
     - file: path=/opt/benchmark state=absent
     - name: Copy benchmark code
       unarchive:
-        src: ../../../package/target/openmessaging-benchmark-0.0.1-SNAPSHOT-bin.tar.gz
+        src: ../../../../package/target/openmessaging-benchmark-0.0.1-SNAPSHOT-bin.tar.gz
         dest: /opt
     - shell: mv /opt/openmessaging-benchmark-0.0.1-SNAPSHOT /opt/benchmark
     - shell: tuned-adm profile latency-performance
@@ -325,52 +271,20 @@
         regexp: "^  bootstrap.servers="
         line: "  bootstrap.servers={{ clientBootstrapServers }}"
       with_items: "{{ drivers_list.stdout_lines }}"
-
-    - name: Configure SASL Mechanism
-      lineinfile:
-        dest: "{{ item }}"
-        regexp: "^  sasl.mechanism="
-        insertafter: "^  bootstrap.servers="
-        line: "  sasl.mechanism=SCRAM-SHA-256"
-      with_items: "{{ drivers_list.stdout_lines }}"
-
-    - name: Configure Benchmark Name
-      lineinfile:
-        dest: "{{ item }}"
-        regexp: "^name: Kafka"
-        line: "name: Kafka+SASL+TLS"
-      with_items: "{{ drivers_list.stdout_lines }}"
-
-    - name: Configure Security Protocol
-      lineinfile:
-        dest: "{{ item }}"
-        regexp: "^  security.protocol="
-        insertafter: "^  bootstrap.servers="
-        line: "  security.protocol=SASL_SSL"
-      with_items: "{{ drivers_list.stdout_lines }}"
-
-    - name: Configure JAAS
-      lineinfile:
-        dest: "{{ item }}"
-        regexp: "^  sasl.jaas.config="
-        insertafter: "^  bootstrap.servers="
-        line: "  sasl.jaas.config=org.apache.kafka.common.security.scram.ScramLoginModule required username='sa_test' password='admin-secret';"
-      with_items: "{{ drivers_list.stdout_lines }}"
-
     - name: Configure memory
       lineinfile:
         dest: /opt/benchmark/bin/benchmark-worker
         regexp: "^JVM_MEM="
-        line: 'JVM_MEM="-Xms16G -Xmx40G -XX:+UseG1GC -XX:MaxGCPauseMillis=10 -XX:+ParallelRefProcEnabled -XX:+UnlockExperimentalVMOptions -XX:+DoEscapeAnalysis -XX:ParallelGCThreads=32 -XX:ConcGCThreads=32 -XX:G1NewSizePercent=50 -XX:+DisableExplicitGC -XX:-ResizePLAB -XX:+PerfDisableSharedMem -XX:+AlwaysPreTouch -XX:-UseBiasedLocking"'
+        line: "JVM_MEM=\"-Xms{{ clientMinJvmHeap }} -Xmx{{ clientMinJvmHeap }} -XX:+UseG1GC -XX:MaxGCPauseMillis=10 -XX:+ParallelRefProcEnabled -XX:+UnlockExperimentalVMOptions -XX:+DoEscapeAnalysis -XX:ParallelGCThreads=32 -XX:ConcGCThreads=32 -XX:G1NewSizePercent=50 -XX:+DisableExplicitGC -XX:-ResizePLAB -XX:+PerfDisableSharedMem -XX:+AlwaysPreTouch -XX:-UseBiasedLocking\""
     - name: Configure memory
       lineinfile:
         dest: /opt/benchmark/bin/benchmark
         regexp: "^JVM_MEM="
         line: 'JVM_MEM="-Xmx1G"'
-    - name: Setup JMX for Producer/Consumer clients
-      copy:
-        src: "monitoring/jmx_exporter/jmx_prometheus_javaagent-0.13.0.jar"
-        dest: "/opt/benchmark/jmx_prometheus_javaagent-0.13.0.jar"
+#    - name: Setup JMX for Producer/Consumer clients
+#      copy:
+#        src: "monitoring/jmx_exporter/jmx_prometheus_javaagent-0.13.0.jar"
+#        dest: "/opt/benchmark/jmx_prometheus_javaagent-0.13.0.jar"
     - name: Configure JMX for Prometheus (Client)
       template:
         src: "monitoring/jmx_exporter/client.yml"
@@ -405,28 +319,6 @@
       with_items: "{{ groups['client'] }}"
 
 # Setup the Prometheus/Grafana monitoring stack
-- name: Format and mount disks for Prometheus
-  hosts: prometheus
-  tags: monitoring
-  connection: ssh
-  become: true
-  tasks:
-    - name: Format disks
-      filesystem:
-        fstype: xfs
-        dev: "{{ item }}"
-      with_items:
-        - "/dev/nvme1n1"
-    - name: Mount disks
-      mount:
-        path: "{{ item.path }}"
-        src: "{{ item.src }}"
-        fstype: xfs
-        opts: defaults,noatime,nodiscard
-        state: mounted
-      with_items:
-        - { path: "/monitoring", src: "/dev/nvme1n1" }
-
 - hosts: prometheus
   tags: monitoring
   roles:

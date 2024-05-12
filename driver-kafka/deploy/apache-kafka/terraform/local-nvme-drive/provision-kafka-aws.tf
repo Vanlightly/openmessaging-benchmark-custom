@@ -1,7 +1,6 @@
 provider "aws" {
   region  = "${var.region}"
   version = "= 3.74"
-  # profile = var.profile
 }
 
 provider "random" {
@@ -29,13 +28,9 @@ variable "key_name" {
 
 variable "region" {}
 variable "az" {}
+variable "deploy_ami" {}
 variable "ami" {}
 variable "profile" {}
-
-variable "gp3_size_gb" {}
-variable "gp3_throughput_mb" {}
-variable "gp3_iops" {}
-variable "gp3_count" {}
 
 variable "instance_types" {
   type = map
@@ -86,6 +81,14 @@ resource "aws_security_group" "benchmark_security_group" {
   name   = "terraform-kafka-${random_id.hash.hex}"
   vpc_id = "${aws_vpc.benchmark_vpc.id}"
 
+  # SSH access from anywhere
+  # ingress {
+  #   from_port   = 22
+  #   to_port     = 22
+  #   protocol    = "tcp"
+  #   cidr_blocks = ["0.0.0.0/0"]
+  # }
+
   # All ports open within the VPC
   ingress {
     from_port   = 0
@@ -99,6 +102,7 @@ resource "aws_security_group" "benchmark_security_group" {
     from_port   = 0
     to_port     = 65535
     protocol    = "tcp"
+#    cidr_blocks = ["83.45.3.205/32"]
     cidr_blocks = ["${chomp(data.http.myip.body)}/32"]
   }
 
@@ -107,12 +111,14 @@ resource "aws_security_group" "benchmark_security_group" {
     from_port   = 9090
     to_port     = 9090
     protocol    = "tcp"
+#    cidr_blocks = ["83.45.3.205/32"]
     cidr_blocks = ["${chomp(data.http.myip.body)}/32"]
   }
   ingress {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
+#    cidr_blocks = ["83.45.3.205/32"]
     cidr_blocks = ["${chomp(data.http.myip.body)}/32"]
   }
 
@@ -150,54 +156,34 @@ resource "aws_instance" "zookeeper" {
   }
 }
 
-locals {
-  device_names = {"0" = "/dev/sdf", "1" = "/dev/sdg", "2" = "/dev/sdh", "3" = "/dev/sdi", "4" = "/dev/sdj", "5" = "/dev/sdk", "6" = "/dev/sdl"}
-  instances = toset(formatlist("%d", range(var.num_instances["kafka"])))
-  volumes = toset(flatten([ for instance in local.instances :
-  [ for volume in range(var.gp3_count) : "i${instance}-v${volume}" ]
-  ]))
-  attachments = toset(flatten([ for instance in local.instances :
-  [ for volume in formatlist("%d", range(var.gp3_count)) : {
-    instance = instance
-    volume = "i${instance}-v${volume}"
-    vol_index = volume
-  }]
-  ]))
-}
-
 resource "aws_instance" "kafka" {
-  for_each               = local.instances
   ami                    = "${var.ami}"
   instance_type          = "${var.instance_types["kafka"]}"
   key_name               = "${aws_key_pair.auth.id}"
   subnet_id              = "${aws_subnet.benchmark_subnet.id}"
   vpc_security_group_ids = ["${aws_security_group.benchmark_security_group.id}"]
+  count                  = "${var.num_instances["kafka"]}"
   monitoring             = true
 
   tags = {
-    Name  = "kafka-${each.key}"
+    Name = "kafka-${count.index}"
     owner = "${var.owner}"
   }
 }
 
-resource "aws_ebs_volume" "kafka-vol" {
-  for_each = local.volumes
-  availability_zone = "${var.az}"
-  size              = "${var.gp3_size_gb}"
-  iops              = "${var.gp3_iops}"
-  type              = "gp3"
-  throughput        = "${var.gp3_throughput_mb}"
+resource "aws_instance" "deploy" {
+  ami                    = "${var.deploy_ami}"
+  instance_type          = "${var.instance_types["deploy"]}"
+  key_name               = "${aws_key_pair.auth.id}"
+  subnet_id              = "${aws_subnet.benchmark_subnet.id}"
+  vpc_security_group_ids = ["${aws_security_group.benchmark_security_group.id}"]
+  count                  = "${var.num_instances["deploy"]}"
+  monitoring             = true
 
   tags = {
-    Name = "kafka-ebs-${each.key}"
+    Name = "kafka-deploy-${count.index}"
+    owner = "${var.owner}"
   }
-}
-
-resource "aws_volume_attachment" "attachment" {
-  for_each = {for att in local.attachments:  att.volume => att}
-  instance_id = aws_instance.kafka[each.value.instance].id
-  volume_id = aws_ebs_volume.kafka-vol[each.key].id
-  device_name = local.device_names[each.value.vol_index]
 }
 
 resource "aws_instance" "client" {
@@ -230,7 +216,7 @@ resource "aws_instance" "prometheus" {
 }
 
 resource "local_file" "hosts_ini" {
-  content = templatefile("${path.module}/hosts_ini.tpl",
+  content = templatefile("${path.module}/../hosts_ini.tpl",
     {
       kafka_public_ips   = [for k in aws_instance.kafka: k.public_ip]
       kafka_private_ips  = [for k in aws_instance.kafka: k.private_ip]
@@ -245,30 +231,42 @@ resource "local_file" "hosts_ini" {
       ssh_user              = "ubuntu"
     }
   )
-  filename = "${path.module}/hosts.ini"
+  filename = "${path.module}/../../ansible/hosts.ini"
 }
 
-#output "clients" {
-#  value = {
-#    for instance in aws_instance.client :
-#    instance.public_ip => instance.private_ip
-#  }
-#}
-#
-#output "brokers" {
-#  value = {
-#    for instance in aws_instance.kafka :
-#    instance.public_ip => instance.private_ip
-#  }
-#}
-#
-#output "zookeeper" {
-#  value = {
-#    for instance in aws_instance.zookeeper :
-#    instance.public_ip => instance.private_ip
-#  }
-#}
-#
-#output "prometheus_host" {
-#  value = "${aws_instance.prometheus.0.public_ip}"
-#}
+resource "local_file" "hosts_private_ini" {
+  content = templatefile("${path.module}/../hosts_private_ini.tpl",
+    {
+      kafka_public_ips   = [for k in aws_instance.kafka: k.public_ip]
+      kafka_private_ips  = [for k in aws_instance.kafka: k.private_ip]
+      zookeeper_public_ips   = aws_instance.zookeeper.*.public_ip
+      zookeeper_private_ips  = aws_instance.zookeeper.*.private_ip
+      clients_public_ips   = aws_instance.client.*.public_ip
+      clients_private_ips  = aws_instance.client.*.private_ip
+      prometheus_host_public_ips   = aws_instance.prometheus.*.public_ip
+      prometheus_host_private_ips  = aws_instance.prometheus.*.private_ip
+      control_public_ips   = aws_instance.client.*.public_ip
+      control_private_ips  = aws_instance.client.*.private_ip
+      ssh_user              = "ubuntu"
+    }
+  )
+  filename = "${path.module}/../../ansible/hosts_private.ini"
+}
+
+output "clients" {
+  value = {
+    for instance in aws_instance.client :
+    instance.public_ip => instance.private_ip
+  }
+}
+
+output "client_ssh_host" {
+  value = "${aws_instance.client.0.public_ip}"
+}
+
+output "deploy" {
+  value = {
+    for instance in aws_instance.deploy :
+    instance.public_ip => instance.private_ip
+  }
+}

@@ -33,9 +33,9 @@ charts/results
 **/deploy/results
 charts/**/*.json
 
-driver-kafka/**/apache-kafka/tls/ca
-driver-kafka/**/apache-kafka/tls/certs
-driver-kafka/**/apache-kafka/results/**/*.json
+driver-kafka/**/tls/ca
+driver-kafka/**/tls/certs
+driver-kafka/**/results/**/*.json
 
 driver-redpanda/**/tls/ca
 driver-redpanda/**/tls/certs
