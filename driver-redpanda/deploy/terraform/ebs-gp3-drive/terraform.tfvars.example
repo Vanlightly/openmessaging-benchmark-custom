@@ -1,0 +1,29 @@
+public_key_path = "~/.ssh/omb.pub"
+region          = "us-west-2"
+az		        = "us-west-2a"
+# AMIs in us-west
+# Intel: Ubuntu 20.04 ami-0d31d7c9fc9503726
+# Intel: Ubuntu 22.04 ami-09c3a3c2cf6003f6c, ami-0fcf52bcf5db7b003
+# ARM: Ubuntu 22.04 ami-03f6bd8c9c6230968
+deploy_ami      = "ami-0d31d7c9fc9503726" # Ubuntu 20.04, AMD64
+redpanda_ami    = "ami-09c3a3c2cf6003f6c" # Ubuntu 22.04, AMD64
+other_ami       = "ami-09c3a3c2cf6003f6c" # Ubuntu 22.04, AMD64
+
+instance_types = {
+  "deploy"        = "t3.small"
+  "redpanda"      = "i3en.6xlarge"
+  "client"        = "c5n.9xlarge"
+  "prometheus"    = "i3en.xlarge"
+}
+
+num_instances = {
+  "deploy"     = 1
+  "client"     = 4
+  "redpanda"   = 3
+  "prometheus" = 1
+}
+
+gp3_size_gb       = 2000
+gp3_iops          = 5000
+gp3_throughput_mb = 250
+gp3_count         = 2

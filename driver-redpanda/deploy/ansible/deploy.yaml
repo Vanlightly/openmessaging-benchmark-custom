@@ -66,6 +66,27 @@
         dest: /etc/systemd/journald.conf
         regexp: ^SystemMaxUse=
         line: SystemMaxUse=1000M
+    - name: Increase hard file descriptor limit
+      pam_limits:
+        domain: '*'
+        limit_type: 'hard'
+        limit_item: nofile
+        value: 500000
+    - name: Increase soft file descriptor limit
+      pam_limits:
+        domain: '*'
+        limit_type: 'soft'
+        limit_item: nofile
+        value: 500000
+    - name: Enable pam_limits.so
+      lineinfile:
+        path: /etc/pam.d/login
+        insertafter: EOF
+        line: 'session required pam_limits.so'
+    - name: Increase inotify user limit
+      sysctl: name=fs.inotify.max_user_instances value=8192 sysctl_set=yes
+    - name: Reboot the machine with all defaults
+      reboot:
 
 - name: set facts about drives
   hosts: redpanda
@@ -249,7 +270,6 @@
             brokers:
               - {{ hostvars[inventory_hostname].private_ip }}:9092
         " --format yaml
-
   handlers:
   - name: fix config owner
     file:

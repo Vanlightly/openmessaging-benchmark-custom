@@ -1,11 +1,10 @@
 provider "aws" {
-  region  = var.region
-  version = "~> 2.7"
-  profile = var.profile
+  region  = "${var.region}"
+  version = "= 3.74"
 }
 
 provider "random" {
-  version = "~> 2.1"
+  version = "= 3.4.3"
 }
 
 variable "public_key_path" {
@@ -31,8 +30,15 @@ variable "region" {}
 variable "az" {}
 variable "profile" {}
 
+variable "deploy_ami" {}
 variable "redpanda_ami" {}
 variable "other_ami" {}
+
+variable "io_drive_type" {}
+variable "io_drive_size_gb" {}
+variable "io_drive_throughput_mb" {}
+variable "io_drive_iops" {}
+variable "io_drive_count" {}
 
 variable "instance_types" {
   type = map
@@ -49,7 +55,7 @@ resource "aws_vpc" "benchmark_vpc" {
   cidr_block = "10.0.0.0/16"
 
   tags = {
-    Name  = "redpanda-Benchmark-VPC-${random_id.hash.hex}"
+    Name  = "RedPanda-Benchmark-VPC-${random_id.hash.hex}"
     owner = "${var.owner}"
   }
 }
@@ -118,17 +124,68 @@ resource "aws_key_pair" "auth" {
   public_key = "${file(var.public_key_path)}"
 }
 
+locals {
+  device_names = {"0" = "/dev/sdf", "1" = "/dev/sdg", "2" = "/dev/sdh"}
+  instances = toset(formatlist("%d", range(var.num_instances["redpanda"])))
+  volumes = toset(flatten([ for instance in local.instances :
+    [ for volume in range(var.io_drive_count) : "i${instance}-v${volume}" ]
+  ]))
+  attachments = toset(flatten([ for instance in local.instances :
+    [ for volume in formatlist("%d", range(var.io_drive_count)) : {
+      instance = instance
+      volume = "i${instance}-v${volume}"
+      vol_index = volume
+    }]
+  ]))
+}
+
 resource "aws_instance" "redpanda" {
+  for_each               = local.instances
   ami                    = "${var.redpanda_ami}"
   instance_type          = "${var.instance_types["redpanda"]}"
   key_name               = "${aws_key_pair.auth.id}"
   subnet_id              = "${aws_subnet.benchmark_subnet.id}"
   vpc_security_group_ids = ["${aws_security_group.benchmark_security_group.id}"]
-  count                  = "${var.num_instances["redpanda"]}"
   monitoring             = true
 
   tags = {
-    Name  = "redpanda-${count.index}"
+    Name  = "redpanda-${each.key}"
+    owner = "${var.owner}"
+  }
+}
+
+# limited by io2 region limit od DevX
+resource "aws_ebs_volume" "redpanda-vol" {
+  for_each = local.volumes
+  availability_zone = "${var.az}"
+  size              = "${var.io_drive_size_gb}"
+  iops              = "${var.io_drive_iops}"
+  type              = "${var.io_drive_type}"
+  throughput        = "${var.io_drive_throughput_mb}"
+
+  tags = {
+    Name = "redpanda-ebs-${each.key}"
+  }
+}
+
+resource "aws_volume_attachment" "attachment" {
+  for_each = {for att in local.attachments:  att.volume => att}
+  instance_id = aws_instance.redpanda[each.value.instance].id
+  volume_id = aws_ebs_volume.redpanda-vol[each.key].id
+  device_name = local.device_names[each.value.vol_index]
+}
+
+resource "aws_instance" "deploy" {
+  ami                    = "${var.deploy_ami}"
+  instance_type          = "${var.instance_types["deploy"]}"
+  key_name               = "${aws_key_pair.auth.id}"
+  subnet_id              = "${aws_subnet.benchmark_subnet.id}"
+  vpc_security_group_ids = ["${aws_security_group.benchmark_security_group.id}"]
+  count                  = "${var.num_instances["deploy"]}"
+  monitoring             = true
+
+  tags = {
+    Name = "redpanda-deploy-${count.index}"
     owner = "${var.owner}"
   }
 }
@@ -162,12 +219,8 @@ resource "aws_instance" "prometheus" {
   }
 }
 
-output "client_ssh_host" {
-  value = "${aws_instance.client.0.public_ip}"
-}
-
 resource "local_file" "hosts_ini" {
-  content = templatefile("${path.module}/hosts_ini.tpl",
+  content = templatefile("${path.module}/../hosts_ini.tpl",
     {
       redpanda_public_ips   = aws_instance.redpanda.*.public_ip
       redpanda_private_ips  = aws_instance.redpanda.*.private_ip
@@ -180,5 +233,40 @@ resource "local_file" "hosts_ini" {
       ssh_user              = "ubuntu"
     }
   )
-  filename = "${path.module}/hosts.ini"
+  filename = "${path.module}/../../ansible/hosts.ini"
+}
+
+resource "local_file" "hosts_private_ini" {
+  content = templatefile("${path.module}/../hosts_private_ini.tpl",
+    {
+      redpanda_public_ips   = aws_instance.redpanda.*.public_ip
+      redpanda_private_ips  = aws_instance.redpanda.*.private_ip
+      clients_public_ips   = aws_instance.client.*.public_ip
+      clients_private_ips  = aws_instance.client.*.private_ip
+      prometheus_host_public_ips   = aws_instance.prometheus.*.public_ip
+      prometheus_host_private_ips  = aws_instance.prometheus.*.private_ip
+      control_public_ips   = aws_instance.client.*.public_ip
+      control_private_ips  = aws_instance.client.*.private_ip
+      ssh_user              = "ubuntu"
+    }
+  )
+  filename = "${path.module}/../../ansible/hosts_private.ini"
+}
+
+output "clients" {
+  value = {
+    for instance in aws_instance.client :
+    instance.public_ip => instance.private_ip
+  }
+}
+
+output "client_ssh_host" {
+  value = "${aws_instance.client.0.public_ip}"
+}
+
+output "deploy" {
+  value = {
+    for instance in aws_instance.deploy :
+    instance.public_ip => instance.private_ip
+  }
 }
