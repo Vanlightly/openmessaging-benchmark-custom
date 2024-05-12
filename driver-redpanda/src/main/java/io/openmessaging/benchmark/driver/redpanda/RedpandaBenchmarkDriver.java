@@ -58,6 +58,7 @@ public class RedpandaBenchmarkDriver implements BenchmarkDriver {
     private List<BenchmarkProducer> producers = Collections.synchronizedList(new ArrayList<>());
     private List<BenchmarkConsumer> consumers = Collections.synchronizedList(new ArrayList<>());
 
+    private Properties commonProperties;
     private Properties topicProperties;
     private Properties producerProperties;
     private Properties consumerProperties;
@@ -68,7 +69,7 @@ public class RedpandaBenchmarkDriver implements BenchmarkDriver {
     public void initialize(File configurationFile, StatsLogger statsLogger) throws IOException {
         config = mapper.readValue(configurationFile, Config.class);
 
-        Properties commonProperties = new Properties();
+        commonProperties = new Properties();
         commonProperties.load(new StringReader(config.commonConfig));
 
         producerProperties = new Properties();
@@ -86,13 +87,22 @@ public class RedpandaBenchmarkDriver implements BenchmarkDriver {
         topicProperties = new Properties();
         topicProperties.load(new StringReader(config.topicConfig));
 
-        admin = AdminClient.create(commonProperties);
+        Properties adminProperties = new Properties();
+        adminProperties.put("client.id", "admin-client");
+        commonProperties.forEach((key, value) -> adminProperties.put(key, value));
+        admin = AdminClient.create(adminProperties);
 
         if (config.reset) {
             // List existing topics
             ListTopicsResult result = admin.listTopics();
             try {
-                Set<String> topics = result.names().get();
+                Set<String> topics = new HashSet<>();
+                for (String name : result.names().get()) {
+                    if (name.startsWith(getTopicNamePrefix())) {
+                        topics.add(name);
+                    }
+                }
+
                 // Delete all existing topics
                 DeleteTopicsResult deletes = admin.deleteTopics(topics);
                 deletes.all().get();
@@ -135,7 +145,11 @@ public class RedpandaBenchmarkDriver implements BenchmarkDriver {
 
     @Override
     public CompletableFuture<BenchmarkProducer> createProducer(String topic) {
-        KafkaProducer<String, byte[]> kafkaProducer = new KafkaProducer<>(producerProperties);
+        Properties properties = new Properties();
+        properties.put("client.id", "prod-" + UUID.randomUUID());
+        commonProperties.forEach((key, value) -> properties.put(key, value));
+
+        KafkaProducer<String, byte[]> kafkaProducer = new KafkaProducer<>(properties);
         BenchmarkProducer benchmarkProducer = new RedpandaBenchmarkProducer(kafkaProducer, topic);
         try {
             // Add to producer list to close later
@@ -155,6 +169,8 @@ public class RedpandaBenchmarkDriver implements BenchmarkDriver {
         Properties properties = new Properties();
         consumerProperties.forEach((key, value) -> properties.put(key, value));
         properties.put(ConsumerConfig.GROUP_ID_CONFIG, subscriptionName);
+        properties.put("client.id", "con-" + UUID.randomUUID());
+
         KafkaConsumer<String, byte[]> kafkaConsumer = new KafkaConsumer<>(properties);
         try {
             // Subscribe
