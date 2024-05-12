@@ -14,13 +14,15 @@
 package io.openmessaging.benchmark.worker.commands;
 
 public class TopicsInfo {
+    public int firstNumber;
     public int numberOfTopics;
     public int numberOfPartitionsPerTopic;
 
     public TopicsInfo() {
     }
 
-    public TopicsInfo(int numberOfTopics, int numberOfPartitionsPerTopic) {
+    public TopicsInfo(int firstNumber, int numberOfTopics, int numberOfPartitionsPerTopic) {
+        this.firstNumber = firstNumber;
         this.numberOfTopics = numberOfTopics;
         this.numberOfPartitionsPerTopic = numberOfPartitionsPerTopic;
     }

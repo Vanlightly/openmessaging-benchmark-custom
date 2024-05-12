@@ -1,0 +1,17 @@
+public_key_path = "~/.ssh/omb.pub"
+region          = "us-west-2"
+az		        = "us-west-2b"
+runner_ami      = "ami-0d31d7c9fc9503726" # Ubuntu 20.04, AMD64
+ami             = "ami-09c3a3c2cf6003f6c" # Ubuntu 22.04, AMD64
+
+instance_types = {
+  "deploy"     = "t3.small"
+  "client"     = "c5n.9xlarge"
+  "prometheus" = "i3en.xlarge"
+}
+
+num_instances = {
+  "deploy"     = 1
+  "client"     = 2
+  "prometheus" = 1
+}

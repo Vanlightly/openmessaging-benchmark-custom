@@ -189,11 +189,14 @@ public class Benchmark {
 
                         // Stop any left over workload
                         worker.stopAll();
+                        log.info("Stopped any running workers");
 
                         worker.initializeDriver(new File(driverConfig));
+                        log.info("Driver initialized");
 
                         WorkloadGenerator generator = new WorkloadGenerator(driverConfiguration.name, workload, worker);
 
+                        log.info("Beginning workload");
                         TestResult result = generator.run();
                         result.beginTime = beginTime;
                         result.endTime = dateFormat.format(new Date());

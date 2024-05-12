@@ -89,7 +89,12 @@ public class KafkaBenchmarkDriver implements BenchmarkDriver {
             // List existing topics
             ListTopicsResult result = admin.listTopics();
             try {
-                Set<String> topics = result.names().get();
+                Set<String> topics = new HashSet<>();
+                for (String name : result.names().get()) {
+                    if (name.startsWith(getTopicNamePrefix())) {
+                        topics.add(name);
+                    }
+                }
                 // Delete all existing topics
                 DeleteTopicsResult deletes = admin.deleteTopics(topics);
                 deletes.all().get();

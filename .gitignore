@@ -26,6 +26,17 @@ target/
 
 # OMB specific
 hosts.ini
+hosts_private.ini
+charts/venv
 charts/output
 charts/results
 **/deploy/results
+charts/**/*.json
+
+driver-kafka/**/tls/ca
+driver-kafka/**/tls/certs
+driver-kafka/**/results/**/*.json
+
+driver-redpanda/**/tls/ca
+driver-redpanda/**/tls/certs
+exclude/

@@ -163,7 +163,8 @@ public class LocalWorker implements Worker, ConsumerCallback {
 
 
         List<String> topics = new ArrayList<>();
-        for (int i = 0; i < topicsInfo.numberOfTopics; i++) {
+        int lastNumberExcl = topicsInfo.firstNumber + topicsInfo.numberOfTopics;
+        for (int i = topicsInfo.firstNumber; i < lastNumberExcl; i++) {
             String topicPrefix = benchmarkDriver.getTopicNamePrefix();
             String topic = String.format("%s-%s-%04d", topicPrefix, RandomGenerator.getRandomString(), i);
             topics.add(topic);

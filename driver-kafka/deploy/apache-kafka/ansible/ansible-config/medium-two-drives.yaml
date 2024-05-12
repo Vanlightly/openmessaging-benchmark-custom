@@ -1,0 +1,8 @@
+kafkaServerVersion: 3.7.0
+kafkaServerLogDirs: /mnt/data-1,/mnt/data-2
+kafkaServerNumReplicaFetchers: 8
+kafkaServerNumNetworkThreads: 8
+kafkaServerMinJvmHeap: 4G
+kafkaServerMaxJvmHeap: 4G
+clientMinJvmHeap: 6G
+clientMaxJvmHeap: 20G

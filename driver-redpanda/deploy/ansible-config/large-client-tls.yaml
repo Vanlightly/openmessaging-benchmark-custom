@@ -1,6 +1,0 @@
-redpanda_package: redpanda=23.1.7-1
-clientMinJvmHeap: 16g
-clientMaxJvmHeap: 40g
-partition_percent: 100
-tls_enabled: true
-sasl_enabled: true
