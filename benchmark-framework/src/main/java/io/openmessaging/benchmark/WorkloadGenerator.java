@@ -47,6 +47,7 @@ public class WorkloadGenerator implements AutoCloseable {
     private final String driverName;
     private final Workload workload;
     private final Worker worker;
+    private static int CreateTopicBatchSize = 20;
 
     private final ExecutorService executor = Executors
             .newCachedThreadPool(new DefaultThreadFactory("messaging-benchmark"));
@@ -70,7 +71,20 @@ public class WorkloadGenerator implements AutoCloseable {
 
     public TestResult run() throws Exception {
         Timer timer = new Timer();
-        List<String> topics = worker.createTopics(new TopicsInfo(workload.topics, workload.partitionsPerTopic));
+        List<String> topics = new ArrayList<>();
+
+        int firstTopicIndex = 0;
+        while (firstTopicIndex < workload.topics) {
+            int topicCount = CreateTopicBatchSize;
+            if (firstTopicIndex + CreateTopicBatchSize > workload.topics) {
+                topicCount = workload.topics-firstTopicIndex;
+            }
+            log.info("Creating topics {} to {}", firstTopicIndex, firstTopicIndex+topicCount-1);
+            List<String> createdTopics = worker.createTopics(new TopicsInfo(firstTopicIndex,
+                                                topicCount, workload.partitionsPerTopic));
+            topics.addAll(createdTopics);
+            firstTopicIndex += topicCount;
+        }
         log.info("Created {} topics in {} ms", topics.size(), timer.elapsedMillis());
 
         createConsumers(topics);
