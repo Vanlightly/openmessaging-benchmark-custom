@@ -136,6 +136,12 @@ cd driver-kafka/deploy/apache-kafka/ansible
 ansible-galaxy install -r requirements.yaml
 ```
 
+If you run Ansible from MacOS, then you may need to run the following to avoid errors.
+
+```bash
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+```
+
 ## 3) Run Ansible
 
 You will run Ansible from the cloned `openmessaging-benchmark-custom` directory.
@@ -153,14 +159,11 @@ kafkaServerMinJvmHeap: 2g
 kafkaServerMaxJvmHeap: 2g
 clientMinJvmHeap: 8g
 clientMaxJvmHeap: 8g
-
 ```
 
 If you are running Ansible from your local machine, or any server outside the VPC, then change the `inventory` config in `ansible.cfg`. See the inline comments.
 
 Now run Ansible. You can deploy with or without TLS.
-
-
 
 Without TLS
 ```bash

@@ -125,6 +125,12 @@ cd driver-kafka/deploy/clients-only/ansible
 ansible-galaxy install -r requirements.yaml
 ```
 
+If you run Ansible from MacOS, then you may need to run the following to avoid errors.
+
+```bash
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+```
+
 ## 3) Run Ansible
 
 You will run Ansible from the cloned `openmessaging-benchmark-custom` directory.
