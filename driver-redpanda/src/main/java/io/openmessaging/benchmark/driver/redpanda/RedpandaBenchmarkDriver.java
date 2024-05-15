@@ -145,11 +145,7 @@ public class RedpandaBenchmarkDriver implements BenchmarkDriver {
 
     @Override
     public CompletableFuture<BenchmarkProducer> createProducer(String topic) {
-        Properties properties = new Properties();
-        properties.put("client.id", "prod-" + UUID.randomUUID());
-        commonProperties.forEach((key, value) -> properties.put(key, value));
-
-        KafkaProducer<String, byte[]> kafkaProducer = new KafkaProducer<>(properties);
+        KafkaProducer<String, byte[]> kafkaProducer = new KafkaProducer<>(producerProperties);
         BenchmarkProducer benchmarkProducer = new RedpandaBenchmarkProducer(kafkaProducer, topic);
         try {
             // Add to producer list to close later
