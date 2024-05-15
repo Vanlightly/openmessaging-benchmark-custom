@@ -2,7 +2,7 @@
 
 Due to the age of this automation, some is no longer supported, and some parts do not work on Aple Silicon. The deployment is split up into:
 1. Terraform, to provision all the servers, including a server for running Ansible.
-2. Running Ansible from an Ubuntu 22.04 instance inside the VPC.
+2. Running Ansible from an Ubuntu 20.04 instance inside the VPC.
 
 Run Terraform to deploy all the servers, optionally including one for Ansible. The Ansible automation does not work on Apple silicon.
 
@@ -131,9 +131,21 @@ cd driver-redpanda/deploy/ansible
 ansible-galaxy install -r requirements.yaml
 ```
 
+If you run Ansible from MacOS, then you may need to run the following to avoid errors.
+
+```bash
+export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
+```
+
 ## 3) Run Ansible
 
-You will run Ansible from the cloned `openmessaging-benchmark-custom` directory.
+If you will run Ansible from the deploy server, first copy the `hosts_private.ini` to the Ansible deploy server. This file was created in the `driver-redpanda/deploy/ansible` directory on your local machine.
+
+```
+scp -i ~/.ssh/omb ansible/hosts_private.ini ubuntu@<public-ip-of-deploy-server>:./openmessaging-benchmark-custom/driver-redpanda/deploy/ansible/.
+```
+
+You will run Ansible from the cloned `openmessaging-benchmark-custom` repo, in the `openmessaging-benchmark-custom/driver-redpanda/deploy/ansible` directory.
 
 Check which yaml file you want to use in the `ansible-config` directory.
 
@@ -191,6 +203,7 @@ rpk cluster config set delete_retention_ms 1800000
 
 For write caching, the following configs are relevant:
 
+- `write_caching_default` defaults to false.
 - `raft_replica_max_pending_flush_bytes` defaults to 262144.
 - `raft_replica_max_flush_delay_ms` defaults to 100ms.
 

@@ -144,7 +144,13 @@ export OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES
 
 ## 3) Run Ansible
 
-You will run Ansible from the cloned `openmessaging-benchmark-custom` directory.
+If you will run Ansible from the deploy server, first copy the `hosts_private.ini` to the Ansible deploy server. This file was created in the `driver-kafka/deploy/apache-kafka/ansible` directory on your local machine.
+
+```
+scp -i ~/.ssh/omb ansible/hosts_private.ini ubuntu@<public-ip-of-deploy-server>:./openmessaging-benchmark-custom/driver-kafka/deploy/apache-kafka/ansible/.
+```
+
+You will run Ansible from the cloned `openmessaging-benchmark-custom` repo, in the `openmessaging-benchmark-custom/driver-kafka/deploy/apache-kafka/ansible` directory.
 
 Check which yaml file you want to use in the `ansible-config` directory.
 
