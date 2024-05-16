@@ -304,42 +304,52 @@ def create_chart(title, y_title, y_max, time_series):
 
     return chart
 
+def get_series(series_desc_type, workload):
+    if series_desc_type == "desc":
+        # first look for a series description pattern
+        series_search = re.search(r'.*__([\.\d\w-]+)', workload, re.IGNORECASE)
+        series = ""
+        if series_search:
+            return series_search.group(1)
+        else:
+            print("Regex failed to find a series description match in string " + workload)
+            sys.exit()
+    elif series_desc_type == "step":
+        series_search = re.search('.*-(step\d+)', workload, re.IGNORECASE)
+        if series_search:
+            return series_search.group(1)
+        else:
+            print("Regex failed to find a step match in string " + workload)
+            sys.exit()
+    else:
+        return workload
 
-def generate_charts(files, prod_y_max, con_y_max,
+def generate_charts(files, sort_by_series, prod_y_max, con_y_max,
                     p100_y_max, p999_y_max, p99_y_max,
                     series_desc_type, only_throughput, lat_width,
                     lat_height):
     workloads = {}
 
+    series_files = dict()
+    for file in sorted(files):
+        data = json.load(open(file))
+        workload = data['workload']
+        series = get_series(series_desc_type, workload)
+        series_files[series] = file
+
     # Charts are labeled based on benchmark names, we need them
     # to be unique. A combination of (driver, workload) defines
     # a unique benchmark and name is "{driver}-{workload}".
     benchmark_names = set()
-    for file in sorted(files):
+
+    sort_key = 1
+    if sort_by_series:
+        sort_key = 0
+
+    for series, file in sorted(series_files.items(), key=lambda x:x[sort_key]):
         data = json.load(open(file))
         workload = data['workload']
         print(workload)
-
-        series = ""
-
-        if series_desc_type == "desc":
-            # first look for a series description pattern
-            series_search = re.search('.*__([\d\w-]+)', workload, re.IGNORECASE)
-            series = ""
-            if series_search:
-                series = series_search.group(1)
-            else:
-                print("Regex failed to find a series description match in string " + workload)
-                sys.exit()
-        elif series_desc_type == "step":
-            series_search = re.search('.*-(step\d+)', workload, re.IGNORECASE)
-            if series_search:
-                series = series_search.group(1)
-            else:
-                print("Regex failed to find a step match in string " + workload)
-                sys.exit()
-        else:
-            series = workload
 
         unique_name = series
         # name used as chart label.
@@ -362,6 +372,8 @@ def generate_charts(files, prod_y_max, con_y_max,
             workloads[workload].append(data)
         else:
             workloads[workload] = [data]
+
+
 
     for workload in workloads:
         stats_pub_rate = []
@@ -720,6 +732,12 @@ if __name__ == "__main__":
                         action='store_true',
                         help='Only generate the throughput charts')
 
+    parser.add_argument('--sort-by-series',
+                        dest='sort_by_series',
+                        required=False,
+                        action='store_true',
+                        help='Sort chart by series, else by filename')
+
     args = parser.parse_args()
 
     prefixes = {}
@@ -759,10 +777,15 @@ if __name__ == "__main__":
     if p99_y_max is None:
         p99_y_max = 0
 
+    sort_by_series = args.sort_by_series
+    if sort_by_series is None:
+        sort_by_series = False
+
     # Recursively fetch all json files in the results dir.
     filelist = glob.iglob(path.join(args.results_dir, "**/*.json"), recursive=True)
 
     generate_charts(filelist,
+                    sort_by_series,
                     prod_y_max,
                     con_y_max,
                     p100_y_max,
