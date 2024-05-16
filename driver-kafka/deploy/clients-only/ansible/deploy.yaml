@@ -63,7 +63,7 @@
     - file: path=/opt/benchmark state=absent
     - name: Copy benchmark code
       unarchive:
-        src: openmessaging-benchmark-0.0.1-SNAPSHOT-bin.tar.gz
+        src: ../../../../package/target/openmessaging-benchmark-0.0.1-SNAPSHOT-bin.tar.gz
         dest: /opt
     - shell: mv /opt/openmessaging-benchmark-0.0.1-SNAPSHOT /opt/benchmark
     - shell: tuned-adm profile latency-performance

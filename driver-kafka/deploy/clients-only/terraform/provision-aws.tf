@@ -156,7 +156,7 @@ resource "local_file" "hosts_ini" {
       ssh_user              = "ubuntu"
     }
   )
-  filename = "${path.module}/hosts.ini"
+  filename = "${path.module}/../ansible/hosts.ini"
 }
 
 resource "local_file" "hosts_private_ini" {
@@ -169,7 +169,7 @@ resource "local_file" "hosts_private_ini" {
       ssh_user              = "ubuntu"
     }
   )
-  filename = "${path.module}/hosts_private.ini"
+  filename = "${path.module}/../ansible/hosts_private.ini"
 }
 
 output "clients" {
