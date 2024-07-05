@@ -123,6 +123,16 @@
         regexp: "^JVM_MEM="
         line: 'JVM_MEM="-Xmx1G"'
 
+    - name: Setup JMX for Producer/Consumer clients
+      copy:
+        src: "monitoring/jmx_exporter/jmx_prometheus_javaagent-0.13.0.jar"
+        dest: "/opt/benchmark/jmx_prometheus_javaagent-0.13.0.jar"
+
+    - name: Configure JMX for Prometheus (Client)
+      template:
+        src: "monitoring/jmx_exporter/client.yml"
+        dest: "/opt/benchmark/metrics.yml"
+
     - name: Configure benchmark worker
       template:
         src: "templates/workers.yaml"
@@ -145,3 +155,117 @@
     - debug:
         msg: "Benchmark clients {{ item }}"
       with_items: "{{ groups['client'] }}"
+
+# Setup the Prometheus/Grafana monitoring stack
+- hosts: prometheus
+  tags: monitoring
+  roles:
+    - cloudalchemy.prometheus
+  vars:
+    prometheus_db_dir: /monitoring/prometheus/data
+    prometheus_scrape_configs:
+      - job_name: "node"
+        static_configs:
+          - targets: "{{ groups['client'] | map('extract', hostvars, ['ansible_default_ipv4','address']) | map('regex_replace', '^(.*)$','\\1:9100') | list  }}"
+      - job_name: "client"
+        static_configs:
+          - targets: "{{ groups['client'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '\\1:9090') | list }}"
+
+- hosts: prometheus
+  tags: monitoring
+  roles:
+    - cloudalchemy.grafana
+  vars:
+    grafana_logs_dir: /monitoring/grafana/logs
+    grafana_data_dir: /monitoring/grafana/data
+    grafana_version: 6.7.3
+    grafana_security:
+      admin_user: admin
+      admin_password: set_me_if_you_want
+    grafana_datasources:
+      - name: prometheus
+        type: prometheus
+        access: proxy
+        url: 'http://localhost:9090'
+        basicAuth: false
+    grafana_dashboards:
+      - dashboard_id: 1860
+        revision_id: 21
+        datasource: prometheus
+
+- name: Install Node exporter on Clients to collect system metrics
+  hosts: client
+  tags: monitoring
+  become: true
+  tasks:
+    - name: Add user node_exporter
+      user:
+        name: node_exporter
+        shell: /bin/false
+        system: true
+        create_home: no
+
+    - name: Download and extract
+      unarchive:
+        src: https://github.com/prometheus/node_exporter/releases/download/v1.0.1/node_exporter-1.0.1.linux-amd64.tar.gz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Copy bin node_exporter to /usr/local/bin
+      copy:
+        src: /tmp/node_exporter-1.0.1.linux-amd64/node_exporter
+        remote_src: yes
+        dest: /usr/local/bin/
+        owner: node_exporter
+        group: node_exporter
+        mode: u+x,g+x,o+x
+
+    - name: Create service node_exporter.service
+      blockinfile:
+        path: /etc/systemd/system/node_exporter.service
+        block: |
+          [Unit]
+          Description=Prometheus Node Exporter
+          Wants=network-online.target
+          After=network-online.target
+          [Service]
+          User=node_exporter
+          Group=node_exporter
+          Type=simple
+          ExecStart=/usr/local/bin/node_exporter
+          [Install]
+          WantedBy=multi-user.target
+        create: true
+
+    - name: systemctl daemon_reload
+      systemd:
+        daemon_reload: yes
+
+    - name: Start and Enable node_exporter
+      service:
+        name: node_exporter
+        state: started
+        enabled: yes
+
+    - name: Check whether port 9100 is available
+      wait_for:
+        port: 9100
+        state: started
+        timeout: 5
+
+- name: Install jattach and async-profiler
+  hosts: client
+  tags: profiling
+  become: true
+  tasks:
+    - name: Download and extract async-profiler
+      unarchive:
+        src: https://github.com/jvm-profiling-tools/async-profiler/releases/download/v1.7.1/async-profiler-1.7.1-linux-x64.tar.gz
+        dest: /tmp
+        remote_src: yes
+
+    - name: Download and install jattach
+      get_url:
+        url: https://github.com/apangin/jattach/releases/download/v1.5/jattach
+        dest: /usr/bin/jattach
+        mode: "0755"

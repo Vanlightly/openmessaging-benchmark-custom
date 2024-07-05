@@ -68,10 +68,12 @@ terraform apply --auto-approve
 
 The Terraform output includes the IP address of the deploy server. SSH to it.
 
-First copy your `omb` private key to the server. This is a throwaway key that you can destroy after running the benchmark. Ansible will need it to SSH onto the servers.
+First copy your `omb` private key to the server. This is a throwaway key that you can destroy after running the benchmark. Ansible will need it to SSH onto the servers. Also copy the `hosts_private.ini` so Ansible knows which hosts to set up.
 
 ```
 scp -i ~/.ssh/omb ~/.ssh/omb* ubuntu@<public-ip-of-deploy-server>:./.ssh/.
+cd ../ansible
+scp -i ~/.ssh/omb hosts_private.ini ubuntu@$DEPLOY:./hosts.ini
 ```
 
 Now SSH onto the server.
@@ -123,6 +125,12 @@ Next install the Ansible Galaxy roles.
 ```
 cd driver-kafka/deploy/clients-only/ansible
 ansible-galaxy install -r requirements.yaml
+```
+
+Now copy the `hosts.ini` to the `ansible` directory.
+
+```
+mv ~/hosts.ini .
 ```
 
 If you run Ansible from MacOS, then you may need to run the following to avoid errors.
